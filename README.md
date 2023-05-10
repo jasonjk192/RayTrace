@@ -8,3 +8,5 @@ Simple Raytracer
 - OpenGL compute shader version which uses compute shaders to calculate per pixel colour
 
 Follows the tutorial from 'Ray Tracing in One Weekend' by Peter Shirley. 
+
+![Raytrace](https://github.com/jasonjk192/RayTrace/blob/main/screenshots/scene.pnh.png?raw=true)
