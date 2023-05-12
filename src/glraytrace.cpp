@@ -11,10 +11,13 @@
 #include "quad.h"
 #include "buffer.h"
 
-glm::vec2 lastPos;
+glm::vec2 lastPos(WINDOW_WIDTH / 2.f, WINDOW_HEIGHT / 2.f);
 
 //Enables NVIDIA's GPU
 extern "C" { __declspec(dllexport) unsigned long NvOptimusEnablement = useDedicatedGPU ? 0x00000001 : 0; }
+
+char keyOnce[GLFW_KEY_LAST + 1];
+#define glfwGetKeyOnce(WINDOW, KEY) (glfwGetKey(WINDOW, KEY) ? (keyOnce[KEY] ? false : (keyOnce[KEY] = true)) : (keyOnce[KEY] = false))
 
 void DispatchCompute()
 {
@@ -55,7 +58,7 @@ void processInput(GLFWwindow* window, Camera& camera)
     {
         glfwSetWindowShouldClose(window, 1);
     }
-    if (GLFW_PRESS == glfwGetKey(window, GLFW_KEY_SPACE))
+    if (GLFW_PRESS == glfwGetKeyOnce(window, GLFW_KEY_SPACE))
     {
         if (camera.IsControllable())
         {
@@ -65,6 +68,7 @@ void processInput(GLFWwindow* window, Camera& camera)
         else
         {
             glfwSetCursorPos(window, WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2);
+            lastPos = glm::vec2(WINDOW_WIDTH / 2.f, WINDOW_HEIGHT / 2.f);
             camera.SetCameraControl(true);
             glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
         }
@@ -113,6 +117,12 @@ int main()
     float lastFrame = 0.f;
     float dt = 0.f;
 
+    Quad2D quad;
+    FrameBuffer fbo;
+    Texture framebufferImage(WINDOW_WIDTH, WINDOW_HEIGHT);
+    fbo.BindTexture(fbo.ID);
+    fbo.UnbindFrameBuffer();
+
     // This is a dumb way to overload Texture() but it works for this simple situation
     Texture rtColor(WINDOW_WIDTH, WINDOW_HEIGHT, "a");
     DispatchCompute();
@@ -121,8 +131,6 @@ int main()
     Shader rayShader(cCompPath.string().c_str());
 
     Camera camera(glm::vec3(-2, 2, 1), glm::vec3(0, 0, -1), glm::vec3(0, 1, 0), 90, aspect_ratio);
-
-    lastPos = glm::vec2(WINDOW_WIDTH/2.f, WINDOW_HEIGHT/2.f);
 
     while (glfwWindowShouldClose(window.getWindow()) == 0)
     {

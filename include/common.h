@@ -33,6 +33,11 @@ inline float random_float(float min, float max) {
     return min + (max - min) * random_float();
 }
 
+inline int random_int(int min, int max) {
+    // Returns a random integer in [min,max].
+    return static_cast<int>(random_float(min, max + 1));
+}
+
 inline float clamp(float x, float min, float max) {
     if (x < min) return min;
     if (x > max) return max;
@@ -65,6 +70,18 @@ glm::vec3 random_in_hemisphere(const glm::vec3& normal) {
         return in_unit_sphere;
     else
         return -in_unit_sphere;
+}
+
+inline glm::vec3 random_cosine_direction(){
+    auto r1 = random_float();
+    auto r2 = random_float();
+    auto z = sqrt(1 - r2);
+
+    auto phi = 2 * pi * r1;
+    auto x = cos(phi) * sqrt(r2);
+    auto y = sin(phi) * sqrt(r2);
+
+    return glm::vec3(x, y, z);
 }
 
 bool near_zero(glm::vec3 v) {

@@ -7,7 +7,7 @@
 // settings
 unsigned int WINDOW_WIDTH = 800;
 unsigned int WINDOW_HEIGHT = 600;
-const float aspect_ratio = 4.f/3.f;
+const float aspect_ratio = float(WINDOW_WIDTH) / float(WINDOW_HEIGHT);
 
 // lighting
 glm::vec3 lightPos(1.2f, 1.0f, 2.0f);

@@ -57,10 +57,10 @@ set(PROJECT_SOURCES_WITHOUT_MAIN
 	)
 
 # Using OpenGL compute shaders
-add_executable(${PROJECT_NAME} src/glraytrace.cpp ${PROJECT_SOURCES_WITHOUT_MAIN})
+#add_executable(${PROJECT_NAME} src/glraytrace.cpp ${PROJECT_SOURCES_WITHOUT_MAIN})
 
 # Using C++
-#add_executable(${PROJECT_NAME} src/cppraytrace.cpp ${PROJECT_SOURCES_WITHOUT_MAIN})
+add_executable(${PROJECT_NAME} src/cppraytrace.cpp ${PROJECT_SOURCES_WITHOUT_MAIN})
 
 #-----------------------------
 

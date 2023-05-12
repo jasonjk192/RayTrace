@@ -1,5 +1,4 @@
-﻿
-#include <iostream>
+﻿#include <iostream>
 
 #include "glad/glad.h"
 #include "GLFW/glfw3.h"
@@ -14,6 +13,10 @@
 #include "hittable_list.h"
 #include "sphere.h"
 #include "ray.h"
+#include "aarect.h"
+#include "box.h"
+#include "constant_medium.h"
+#include "pdf.h"
 
 float hit_sphere(const glm::vec3& center, double radius, const ray& r)
 {
@@ -30,24 +33,119 @@ float hit_sphere(const glm::vec3& center, double radius, const ray& r)
     }
 }
 
-glm::vec3 ray_color(const ray& r, const hittable& world, int depth)
+glm::vec3 ray_color(const ray& r, const glm::vec3& background, const hittable& world, shared_ptr<hittable>& lights, int depth)
 {
     hit_record rec;
 
-    if (depth <= 0)
-        return glm::vec3(0, 0, 0);
+    if (depth <= 0) return glm::vec3(0, 0, 0);
+    if (!world.hit(r, 0.001f, infinity, rec)) return background;
 
-    if (world.hit(r, 0.001f, infinity, rec))
-    {
-        ray scattered;
-        glm::vec3 attenuation;
-        if (rec.mat_ptr->scatter(r, rec, attenuation, scattered))
-            return attenuation * ray_color(scattered, world, depth - 1);
-        return glm::vec3(0, 0, 0);
-    }
-    glm::vec3 unit_direction = glm::normalize(r.direction());
-    auto t = 0.5f * (unit_direction.y + 1.0f);
-    return (1.0f - t) * glm::vec3(1.0f, 1.0f, 1.0f) + t * glm::vec3(0.5f, 0.7f, 1.0f);
+    ray scattered;
+    glm::vec3 attenuation;
+    glm::vec3 emitted = rec.mat_ptr->emitted(r, rec, rec.u, rec.v, rec.p);
+
+    float pdf;
+    glm::vec3 albedo;
+
+    if (!rec.mat_ptr->scatter(r, rec, albedo, scattered, pdf))
+        return emitted;
+
+    auto p0 = make_shared<hittable_pdf>(lights, rec.p);
+    auto p1 = make_shared<cosine_pdf>(rec.normal);
+    mixture_pdf mixed_pdf(p0, p1);
+
+    scattered = ray(rec.p, mixed_pdf.generate(), r.time());
+    pdf = mixed_pdf.value(scattered.direction());
+
+    return emitted  + albedo * rec.mat_ptr->scattering_pdf(r, rec, scattered) * ray_color(scattered, background, world, lights, depth - 1) / pdf;
+
+    //if (!rec.mat_ptr->scatter(r, rec, attenuation, scattered))
+    //    return emitted;
+    //return emitted + attenuation * ray_color(scattered, background, world, depth - 1);
+    
+    //glm::vec3 unit_direction = glm::normalize(r.direction());
+    //auto t = 0.5f * (unit_direction.y + 1.0f);
+    //return (1.0f - t) * glm::vec3(1.0f, 1.0f, 1.0f) + t * glm::vec3(0.5f, 0.7f, 1.0f);
+}
+
+hittable_list earth()
+{
+    auto earth_texture = make_shared<image_texture>("./assets/earthmap.jpg");
+    auto earth_surface = make_shared<lambertian>(earth_texture);
+    auto globe = make_shared<sphere>(glm::vec3(0, 0, 0), 2, earth_surface);
+
+    return hittable_list(globe);
+}
+
+hittable_list simple_light()
+{
+    hittable_list objects;
+
+    //auto pertext = make_shared<noise_texture>(4);
+    auto pertext = glm::vec3(0.8, 0.8, 0.0);
+    
+    objects.add(make_shared<sphere>(glm::vec3(0, -1000, 0), 1000, make_shared<lambertian>(pertext)));
+    objects.add(make_shared<sphere>(glm::vec3(0, 2, 0), 2, make_shared<lambertian>(pertext)));
+
+    auto difflight = make_shared<diffuse_light>(glm::vec3(4, 4, 4));
+    objects.add(make_shared<xy_rect>(3, 5, 1, 3, -2, difflight));
+
+    return objects;
+}
+
+hittable_list first_scene()
+{
+    hittable_list objects;
+
+    auto material_ground = make_shared<lambertian>(glm::vec3(0.8, 0.8, 0.0));
+    auto material_center = make_shared<lambertian>(glm::vec3(0.1, 0.2, 0.5));
+    auto material_left = make_shared<dielectric>(1.5);
+    auto material_right = make_shared<metal>(glm::vec3(0.8, 0.6, 0.2), 0.0);
+    auto checker = make_shared<checker_texture>(glm::vec3(0.2, 0.3, 0.1), glm::vec3(0.9, 0.9, 0.9));
+
+    objects.add(make_shared<sphere>(glm::vec3(0.0, -100.5, -1.0), 100.0, make_shared<lambertian>(checker)));
+    objects.add(make_shared<sphere>(glm::vec3(0.0, 0.0, -1.0), 0.5, material_center));
+    objects.add(make_shared<sphere>(glm::vec3(-1.0, 0.0, -1.0), 0.5, material_left));
+    objects.add(make_shared<sphere>(glm::vec3(-1.0, 0.0, -1.0), -0.4, material_left));
+    objects.add(make_shared<sphere>(glm::vec3(1.0, 0.0, -1.0), 0.5, material_right));
+
+    //objects.add(make_shared<sphere>(glm::vec3(0, -1000, 0), 1000, make_shared<lambertian>(checker)));
+
+    return objects;
+}
+
+hittable_list cornell_box()
+{
+    hittable_list objects;
+
+    auto red = make_shared<lambertian>(glm::vec3(.65, .05, .05));
+    auto white = make_shared<lambertian>(glm::vec3(.73, .73, .73));
+    auto green = make_shared<lambertian>(glm::vec3(.12, .45, .15));
+    auto light = make_shared<diffuse_light>(glm::vec3(15, 15, 15));
+
+    objects.add(make_shared<yz_rect>(0, 555, 0, 555, 555, green));
+    objects.add(make_shared<yz_rect>(0, 555, 0, 555, 0, red));
+    //objects.add(make_shared<xz_rect>(213, 343, 227, 332, 554, light));
+    objects.add(make_shared<flip_face>(make_shared<xz_rect>(213, 343, 227, 332, 554, light)));
+    objects.add(make_shared<xz_rect>(0, 555, 0, 555, 0, white));
+    objects.add(make_shared<xz_rect>(0, 555, 0, 555, 555, white));
+    objects.add(make_shared<xy_rect>(0, 555, 0, 555, 555, white));
+
+    shared_ptr<hittable> box1 = make_shared<box>(glm::vec3(0, 0, 0), glm::vec3(165, 330, 165), white);
+    //box1 = make_shared<rotate_y>(box1, 15);
+    box1 = make_shared<translate>(box1, glm::vec3(265, 0, 295));
+
+    shared_ptr<hittable> box2 = make_shared<box>(glm::vec3(0, 0, 0), glm::vec3(165, 165, 165), white);
+    //box2 = make_shared<rotate_y>(box2, -18);
+    box2 = make_shared<translate>(box2, glm::vec3(130, 0, 65));
+
+    objects.add(box1);
+    objects.add(box2);
+
+    //objects.add(make_shared<constant_medium>(box1, 0.01, glm::vec3(0, 0, 0)));
+    //objects.add(make_shared<constant_medium>(box2, 0.01, glm::vec3(1, 1, 1)));
+
+    return objects;
 }
 
 int main()
@@ -57,30 +155,27 @@ int main()
     float lastFrame = 0.f;
     float dt = 0.f;
 
+    //glm::vec3 background(0.5f, 0.7f, 1.0f);
+    glm::vec3 background(0.f, 0.f, 0.f);
+
+
     // Image
-    const auto aspect_ratio = 4.0 / 3.0;
     const int image_width = WINDOW_WIDTH;
     const int image_height = WINDOW_HEIGHT;
-    const int samples_per_pixel = 4;
-    const int max_depth = 40;
+    const int samples_per_pixel = 10;
+    const int max_depth = 10;
 
     // World
-    hittable_list world;
-    
-    auto material_ground = make_shared<lambertian>(glm::vec3(0.8, 0.8, 0.0));
-    auto material_center = make_shared<lambertian>(glm::vec3(0.1, 0.2, 0.5));
-    auto material_left = make_shared<dielectric>(1.5);
-    auto material_right = make_shared<metal>(glm::vec3(0.8, 0.6, 0.2), 0.0);
+    hittable_list world = cornell_box();
+    shared_ptr<hittable> lights = make_shared<xz_rect>(213, 343, 227, 332, 554, shared_ptr<material>());
 
-    world.add(make_shared<sphere>(glm::vec3(0.0, -100.5, -1.0), 100.0, material_ground));
-    world.add(make_shared<sphere>(glm::vec3(0.0, 0.0, -1.0), 0.5, material_center));
-    world.add(make_shared<sphere>(glm::vec3(-1.0, 0.0, -1.0), 0.5, material_left));
-    world.add(make_shared<sphere>(glm::vec3(-1.0, 0.0, -1.0), -0.4, material_left));
-    world.add(make_shared<sphere>(glm::vec3(1.0, 0.0, -1.0), 0.5, material_right));
+    //world = earth();
 
     // Camera
 
-    Camera cam(90.f, aspect_ratio);
+    //Camera camera(glm::vec3(-2, 2, 1), glm::vec3(0, 0, -1), glm::vec3(0, 1, 0), 90, aspect_ratio);
+    //Camera camera(glm::vec3(26, 3, 6), glm::vec3(0, 2, 0), glm::vec3(0, 1, 0), 20, aspect_ratio);
+    Camera camera(glm::vec3(278, 278, -800), glm::vec3(278, 278, 0), glm::vec3(0, 1, 0), 40, aspect_ratio);
 
     // SAMPLING //
 
@@ -96,9 +191,13 @@ int main()
             {
                 auto u = (i + random_float()) / (image_width - 1);
                 auto v = (j + random_float()) / (image_height - 1);
-                ray r = cam.GetRay(u, v);
-                pixel_color += ray_color(r, world, max_depth);
+                ray r = camera.GetRay(u, v);
+                pixel_color += ray_color(r, background, world, lights, max_depth);
             }
+
+            if (pixel_color.r != pixel_color.r) pixel_color.r = 0.0;
+            if (pixel_color.g != pixel_color.g) pixel_color.g = 0.0;
+            if (pixel_color.b != pixel_color.b) pixel_color.b = 0.0;
 
             pixel_color.r = sqrt(pixel_color.r / samples_per_pixel);
             pixel_color.g = sqrt(pixel_color.g / samples_per_pixel);
@@ -107,7 +206,6 @@ int main()
             pixel_color.r = clamp(pixel_color.r, 0.f, 0.999f);
             pixel_color.g = clamp(pixel_color.g, 0.f, 0.999f);
             pixel_color.b = clamp(pixel_color.b, 0.f, 0.999f);
-
 
             data[0 + i * 3 + j * WINDOW_WIDTH * 3] = pixel_color.r * 256;
             data[1 + i * 3 + j * WINDOW_WIDTH * 3] = pixel_color.g * 256;
