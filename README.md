@@ -10,3 +10,9 @@ Simple Raytracer
 Follows the tutorial from 'Ray Tracing in One Weekend' by Peter Shirley. 
 
 ![Raytrace](https://github.com/jasonjk192/RayTrace/blob/main/screenshots/scene.pnh.png?raw=true)
+
+![Raytrace](https://github.com/jasonjk192/RayTrace/blob/main/screenshots/scene2.png?raw=true)
+Raytrace with no light source (and no background lighting)
+
+![Raytrace](https://github.com/jasonjk192/RayTrace/blob/main/screenshots/scene3.png?raw=true)
+Raytrace with no light but includes support for dielectrics!

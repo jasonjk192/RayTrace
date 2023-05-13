@@ -40,24 +40,18 @@ glm::vec3 ray_color(const ray& r, const glm::vec3& background, const hittable& w
     if (depth <= 0) return glm::vec3(0, 0, 0);
     if (!world.hit(r, 0.001f, infinity, rec)) return background;
 
-    ray scattered;
-    glm::vec3 attenuation;
+    scatter_record srec;
     glm::vec3 emitted = rec.mat_ptr->emitted(r, rec, rec.u, rec.v, rec.p);
+    if (!rec.mat_ptr->scatter(r, rec, srec)) return emitted;
+    if (srec.is_specular) return srec.attenuation * ray_color(srec.specular_ray, background, world, lights, depth - 1);
 
-    float pdf;
-    glm::vec3 albedo;
+    auto light_ptr = make_shared<hittable_pdf>(lights, rec.p);
+    mixture_pdf p(light_ptr, srec.pdf_ptr);
 
-    if (!rec.mat_ptr->scatter(r, rec, albedo, scattered, pdf))
-        return emitted;
+    ray scattered = ray(rec.p, p.generate(), r.time());
+    auto pdf_val = p.value(scattered.direction());
 
-    auto p0 = make_shared<hittable_pdf>(lights, rec.p);
-    auto p1 = make_shared<cosine_pdf>(rec.normal);
-    mixture_pdf mixed_pdf(p0, p1);
-
-    scattered = ray(rec.p, mixed_pdf.generate(), r.time());
-    pdf = mixed_pdf.value(scattered.direction());
-
-    return emitted  + albedo * rec.mat_ptr->scattering_pdf(r, rec, scattered) * ray_color(scattered, background, world, lights, depth - 1) / pdf;
+    return emitted + srec.attenuation * rec.mat_ptr->scattering_pdf(r, rec, scattered) * ray_color(scattered, background, world, lights, depth - 1) / pdf_val;
 
     //if (!rec.mat_ptr->scatter(r, rec, attenuation, scattered))
     //    return emitted;
@@ -140,7 +134,10 @@ hittable_list cornell_box()
     box2 = make_shared<translate>(box2, glm::vec3(130, 0, 65));
 
     objects.add(box1);
-    objects.add(box2);
+    //objects.add(box2);
+
+    auto glass = make_shared<dielectric>(1.5);
+    objects.add(make_shared<sphere>(glm::vec3(190, 90, 190), 90, glass));
 
     //objects.add(make_shared<constant_medium>(box1, 0.01, glm::vec3(0, 0, 0)));
     //objects.add(make_shared<constant_medium>(box2, 0.01, glm::vec3(1, 1, 1)));
@@ -167,7 +164,7 @@ int main()
 
     // World
     hittable_list world = cornell_box();
-    shared_ptr<hittable> lights = make_shared<xz_rect>(213, 343, 227, 332, 554, shared_ptr<material>());
+    shared_ptr<hittable> lights = make_shared<sphere>(glm::vec3(190, 90, 190), 90, shared_ptr<material>()); // make_shared<xz_rect>(213, 343, 227, 332, 554, shared_ptr<material>());
 
     //world = earth();
 

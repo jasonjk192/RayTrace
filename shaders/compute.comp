@@ -5,12 +5,13 @@
 #define MAT_DIELECTRIC 2
 #define MAT_LIGHT 3
 
+#define PI 3.1415926538
 #define INV_SQRT_OF_2PI 0.39894228040143267793994605993439  // 1.0/SQRT_OF_2PI
 #define INV_PI 0.31830988618379067153776752674503
 
 const float inf = 99999.f;
-const int samples_per_pixel = 30;
-const int max_depth = 10;
+const int samples_per_pixel = 50;
+const int max_depth = 8;
 const uint k = 1103515245U; 
 
 struct Camera
@@ -122,6 +123,32 @@ vec3 random_in_hemisphere(vec3 normal, inout float seed)
         return -in_unit_sphere;
 }
 
+vec3 random_to_sphere(float radius, float distance_squared, inout float seed)
+{
+    float r1 = hash1(seed);
+    float r2 = hash1(seed);
+    float z = 1 + r2 * (sqrt(1 - radius * radius / distance_squared) - 1);
+
+    float phi = 2 * PI * r1;
+    float x = cos(phi) * sqrt(1 - z * z);
+    float y = sin(phi) * sqrt(1 - z * z);
+
+    return vec3(x, y, z);
+}
+
+vec3 random_cosine_direction(inout float seed)
+{
+    float r1 = hash1(seed);
+    float r2 = hash1(seed);
+    float z = sqrt(1-r2);
+
+    float phi = 2*PI*r1;
+    float x = cos(phi)*sqrt(r2);
+    float y = sin(phi)*sqrt(r2);
+
+    return vec3(x, y, z);
+}
+
 //////////////////////////////////////////////////////////////////
 
 ///////////// Ray /////////////
@@ -168,13 +195,51 @@ void set_face_normal(Ray r, vec3 outward_normal, inout HitRecord rec)
 
 ///////////////////////////////
 
+/////// Scatter Record ////////
+
+struct ScatterRecord {
+    Ray specular_ray;
+    bool is_specular;
+    vec3 attenuation;
+    float pdf;
+};
+
+///////////////////////////////
+
+//////////// ONB //////////////
+
+vec3[3] build_onb_from_w(vec3 n)
+{
+    vec3[3] axis;
+    axis[2] = normalize(n);
+    vec3 a = (abs(axis[2].x) > 0.9) ? vec3(0,1,0) : vec3(1,0,0);
+    axis[1] = normalize(cross(axis[2], a));
+    axis[0] = cross(axis[2], axis[1]);
+    return axis;
+}
+
+vec3 onb_local(vec3[3] uvw, vec3 a)
+{
+    return a.x * uvw[0] + a.y * uvw[1] + a.z * uvw[2];
+}
+
+///////////////////////////////
+
 /////// Scene Elements ////////
 
 struct Sphere
 {
-  vec3 center;
-  float radius;
+    vec3 center;
+    float radius;
 };
+
+vec3 random_point_on_sphere(vec3 center, float radius, vec3 o, inout float seed)
+{
+    vec3 direction = center - o;
+    float distance_squared = dot(direction, direction);
+    vec3[3] uvw = build_onb_from_w(direction);
+    return onb_local(uvw, random_to_sphere(radius, distance_squared, seed));
+}
 
 bool hit_sphere(Sphere s, Ray r, float t_min, float t_max, inout HitRecord rec)
 {
@@ -220,17 +285,17 @@ bool hit_world(Ray r, float t_min, float t_max, inout HitRecord rec)
     if(hit_sphere(s1, r, t_min, rec.t, rec))
     {
         hasHit = true;
-        rec.material = Material(MAT_DIFFUSE, vec3(1,0,0), 1.0, 0.0);
+        rec.material = Material(MAT_DIFFUSE, vec3(0.9,0.1,0.4), 1.0, 0.0);
     }
     if(hit_sphere(s2, r, t_min, rec.t, rec))
     {
         hasHit = true;
-        rec.material = Material(MAT_METAL, vec3(0,1,0), 1.0, 0.0);
+        rec.material = Material(MAT_METAL, vec3(0.8,0.8,0), 1.0, 0.0);
     }
     if(hit_sphere(s3, r, t_min, rec.t, rec))
     {
         hasHit = true;
-        rec.material = Material(MAT_METAL, vec3(0.5,0.6,0.5), 0.5, 0.0);
+        rec.material = Material(MAT_METAL, vec3(0.7,0.4,0.9), 0.5, 0.0);
     }
     if(hit_sphere(s4, r, t_min, rec.t, rec))
     {
@@ -238,11 +303,11 @@ bool hit_world(Ray r, float t_min, float t_max, inout HitRecord rec)
         rec.material = Material(MAT_DIELECTRIC, vec3(1.0), 0.0, 1.5);
     }
 
-    if(hit_sphere(s5, r, t_min, rec.t, rec))
+    /*if(hit_sphere(s5, r, t_min, rec.t, rec))
     {
         hasHit = true;
         rec.material = Material(MAT_LIGHT, vec3(50.0), 0.0, 1.5);
-    }
+    }*/
 
     return hasHit;
 }
@@ -253,16 +318,9 @@ bool hit_world(Ray r, float t_min, float t_max, inout HitRecord rec)
 
 vec3 get_sky(vec3 dir)
 {
-    return vec3(0.1);
+    //return vec3(0);
     float t = 0.5*(dir.y + 1.0);
     return (1.0-t)*vec3(1.0, 1.0, 1.0) + t*vec3(0.5, 0.7, 1.0);
-}
-
-vec3 ray_material_emit(Ray r, HitRecord rec)
-{
-    if(rec.material.type == 3)
-        return rec.material.albedo;
-    return vec3(0);
 }
 
 float reflectance(float cosine, float ref_idx)
@@ -272,27 +330,42 @@ float reflectance(float cosine, float ref_idx)
     return r0 + (1-r0)*pow((1 - cosine),5);
 }
 
-bool ray_material_scatter(Ray r, HitRecord rec, vec2 st, out vec3 attenuation, out Ray outRay)
+float ray_material_scattering_pdf(Ray r, HitRecord rec, Ray scattered)
+{
+    float cosine = dot(rec.normal, normalize(scattered.direction));
+            return cosine < 0 ? 0 : cosine/PI;
+    return 0;
+}
+
+vec3 ray_material_emit(Ray r, HitRecord rec)
+{
+    if(rec.material.type == 3)
+        return rec.material.albedo;
+    return vec3(0);
+}
+
+bool ray_material_scatter(Ray r, HitRecord rec, vec2 st, inout float seed, out ScatterRecord srec)
 {
     if(rec.material.type == MAT_DIFFUSE)
     {
-        vec3 target = rec.p + random_in_hemisphere(rec.normal, gSeed);
-        outRay.origin = rec.p;
-        outRay.direction = target - rec.p;
-        attenuation = rec.material.albedo;
+        vec3[3] uvw = build_onb_from_w(rec.normal);
+        vec3 local_direction = onb_local(uvw, random_cosine_direction(seed));
+        srec.is_specular = false;
+        srec.attenuation = rec.material.albedo;
         return true;
     }
+
     if(rec.material.type == MAT_METAL)
     {
         vec3 reflection = reflect(normalize(r.direction), rec.normal);
-        outRay.origin = rec.p;
-        outRay.direction = reflection + rec.material.fuzz * random_in_unit_sphere(gSeed);
-        attenuation = rec.material.albedo;
-        return dot(outRay.direction, rec.normal) > 0;
+        srec.specular_ray = Ray(rec.p, normalize(reflection + rec.material.fuzz * random_in_unit_sphere(gSeed)), r.time);
+        srec.attenuation = rec.material.albedo;
+        srec.is_specular = true;
+        return true;
     }
+
     if(rec.material.type == MAT_DIELECTRIC)
     {
-        attenuation = vec3(1.0);
         float refraction_ratio = rec.front_face ? (1.0/rec.material.ir) : rec.material.ir;
         vec3 unit_direction = normalize(r.direction);
         float cos_theta = min(dot(-unit_direction, rec.normal), 1.0);
@@ -305,19 +378,23 @@ bool ray_material_scatter(Ray r, HitRecord rec, vec2 st, out vec3 attenuation, o
         else
             direction = refract(unit_direction, rec.normal, refraction_ratio);
 
-        outRay.origin = rec.p;
-        outRay.direction = direction;
+        srec.specular_ray = Ray(rec.p, normalize(direction), r.time);
+        srec.is_specular = true;
+        srec.attenuation = vec3(1.0);
         return true;
     }
+
     if(rec.material.type == MAT_LIGHT)
     {
-        attenuation = rec.material.albedo;
-        return true;
+        srec.attenuation = rec.material.albedo;
+        srec.is_specular = false;
+        return false;
     }
+
     return false;
 }
 
-vec3 ray_color(Ray r, vec2 st)
+vec3 ray_color(Ray r, vec2 st, inout float seed)
 {
     vec3 color = vec3(1.0);
 
@@ -326,15 +403,54 @@ vec3 ray_color(Ray r, vec2 st)
     {
         if(hit_world(r, 0.001, inf, rec))
         {
-            Ray nr;
-            vec3 atten;
-            if(ray_material_scatter(r, rec, st, atten, nr))
+            vec3 emit_color = ray_material_emit(r, rec);
+            ScatterRecord srec;
+
+            if(ray_material_scatter(r, rec, st, seed, srec))
             {
-                color *= atten;
-                color += ray_material_emit(r, rec);
-                r = nr;
+                if(srec.is_specular)
+                {
+                    color *= srec.attenuation;
+                    r = srec.specular_ray;
+                }
+                else
+                {
+                    vec3 scatter_direction;
+                    vec3[3] uvw_for_lambert = build_onb_from_w(rec.normal);
+
+                    // Generate scatter ray from either diffuse material (cosine pdf) or dielectric glass material (hittable pdf)
+                    // Workaround for mixture pdf, doesn't support light source sampling for now
+                    if(hash1(seed) > 0.5)
+                    {
+                        vec3 direction = vec3(1, 0, -1) - rec.p;
+                        float distance_squared = dot(direction, direction);
+                        vec3[3] uvw = build_onb_from_w(direction);
+                        scatter_direction = onb_local(uvw, random_to_sphere(0.5, distance_squared, seed));
+                    }
+                    else
+                    {
+                        scatter_direction = onb_local(uvw_for_lambert, random_cosine_direction(seed));
+                    }
+                    Ray scattered = Ray(rec.p, scatter_direction, r.time);
+
+                    // Then find out the pdf contribution of both pdfs and average them out
+                    vec3 direction = vec3(1, 0, -1) - scatter_direction;
+                    float radius = 0.5;
+                    float cos_theta_max = sqrt(1 - radius * radius / dot(direction, direction));
+                    float solid_angle = 2 * PI * (1 - cos_theta_max);
+                    float pdf_value_1 = 1/solid_angle;
+                    
+                    float cosine = dot(normalize(scatter_direction), uvw_for_lambert[2]);
+                    float pdf_value_2 = (cosine <= 0) ? 0 : cosine / PI;
+
+                    float pdf = (pdf_value_1 + pdf_value_2) * 0.5;
+
+                    color *= srec.attenuation * ray_material_scattering_pdf(r, rec, scattered) / pdf;
+                    color += emit_color;
+                    r = scattered;
+                }
             }
-            else return vec3(0);
+            else return color + emit_color;
         }
         else return color * get_sky(normalize(r.direction));
     }
@@ -364,8 +480,12 @@ void main()
 	    float v = float(pixel_coords.y + n.y) / (float(img_size.y) - 1);
 
         r.direction = cam.lower_left_corner + u * cam.horizontal + v * cam.vertical - cam.origin;
-        pixel.rgb += ray_color(r, st);
+        pixel.rgb += ray_color(r, st, gSeed);
     }
+    pixel.r = isnan(pixel.r)? 0 : pixel.r;
+    pixel.g = isnan(pixel.g)? 0 : pixel.g;
+    pixel.b = isnan(pixel.b)? 0 : pixel.b;
+
     pixel.rgb = sqrt(pixel.rgb/samples_per_pixel);
 
 	imageStore(img_output, pixel_coords, pixel);
