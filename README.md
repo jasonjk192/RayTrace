@@ -16,3 +16,6 @@ Raytrace with no light source (and no background lighting)
 
 ![Raytrace](https://github.com/jasonjk192/RayTrace/blob/main/screenshots/scene3.png?raw=true)
 Raytrace with no light but includes support for dielectrics!
+
+![Raytrace](https://github.com/jasonjk192/RayTrace/blob/main/screenshots/scene4.png?raw=true)
+3rd method with improved performance + new scene objects!
