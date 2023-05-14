@@ -71,6 +71,9 @@ public:
         {
             std::cout << "ERROR::SHADER::FILE_NOT_SUCCESFULLY_READ: " << e.what() << std::endl;
         }
+
+        computeCode = shader_include(computeCode.c_str(), computePath);
+
         const char* cShaderCode = computeCode.c_str();
 
         GLuint compute = glCreateShader(GL_COMPUTE_SHADER);
@@ -121,6 +124,10 @@ public:
             std::cout << "Error in file: " << fragName << std::endl;
             std::cout << "ERROR::SHADER::FILE_NOT_SUCCESFULLY_READ: " << e.what() << std::endl;
         }
+
+        vertexCode = shader_include(vertexCode.c_str(), vertexPath);
+        fragmentCode = shader_include(fragmentCode.c_str(), fragmentPath);
+
         const char* vShaderCode = vertexCode.c_str();
         const char* fShaderCode = fragmentCode.c_str();
         // 2. compile shaders
@@ -287,6 +294,49 @@ private:
             shader.replace(start_pos, (length + 1) - start_pos, content);
             start_pos += content.length();
         }
+    }
+
+    // 2nd version which takes in shader code and shader's path (not the directory)
+    // All relevant includes must be in the directory relative to the current shader in order to replace #include 
+    std::string shader_include(const char* shaderCode, const char* shaderPath)
+    {
+        std::string include_path = std::filesystem::path(shaderPath).parent_path().string();
+        
+        size_t pos = 0;
+        std::string include_dir = "#include ";
+
+        std::string modified_code = std::string(shaderCode);
+        while ((pos = modified_code.find(include_dir, pos)) != std::string::npos)
+        {
+            int include_pos_start = pos;
+            pos = modified_code.find("\"", pos) + 1;
+            int length = modified_code.find("\"", pos);
+
+            std::string file = modified_code.substr(pos, length - pos);
+            std::string content = "";
+            std::ifstream f;
+            f.open((include_path + "//" + file).c_str());
+            if (f.is_open())
+            {
+                char buffer[1024];
+
+                while (!f.eof())
+                {
+                    f.getline(buffer, 1024);
+                    content += buffer;
+                    content += "\n";
+                }
+            }
+            else
+            {
+                std::cerr << "Couldn't include shader file: " << include_path + "//" + file << "\n";
+            }
+
+            modified_code.replace(include_pos_start, (length + 1) - include_pos_start, content);
+            pos = include_pos_start + 1;
+        }
+
+        return modified_code;
     }
 };
 #endif

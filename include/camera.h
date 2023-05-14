@@ -62,6 +62,9 @@ public:
     glm::vec3 GetHorizontal() const { return horizontal; }
     glm::vec3 GetVertical() const { return vertical; }
     glm::vec3 GetLowerLeftCorner() const { return lower_left_corner; }
+    glm::vec3 GetForward() const { return forward; }
+    glm::vec3 GetRight() const { return right; }
+    glm::vec3 GetUp() const { return up; }
     bool IsControllable() const { return isCameraControllable; }
 
 private:

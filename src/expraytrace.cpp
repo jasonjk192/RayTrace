@@ -19,37 +19,12 @@ extern "C" { __declspec(dllexport) unsigned long NvOptimusEnablement = useDedica
 char keyOnce[GLFW_KEY_LAST + 1];
 #define glfwGetKeyOnce(WINDOW, KEY) (glfwGetKey(WINDOW, KEY) ? (keyOnce[KEY] ? false : (keyOnce[KEY] = true)) : (keyOnce[KEY] = false))
 
-void DispatchCompute()
+void ShaderSetCamera(Shader& shader, Camera& camera)
 {
-    int work_grp_cnt[3];
-
-    glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_COUNT, 0, &work_grp_cnt[0]);
-    glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_COUNT, 1, &work_grp_cnt[1]);
-    glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_COUNT, 2, &work_grp_cnt[2]);
-
-    printf("max global (total) work group counts x:%i y:%i z:%i\n",
-        work_grp_cnt[0], work_grp_cnt[1], work_grp_cnt[2]);
-
-    int work_grp_size[3];
-
-    glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_SIZE, 0, &work_grp_size[0]);
-    glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_SIZE, 1, &work_grp_size[1]);
-    glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_SIZE, 2, &work_grp_size[2]);
-
-    printf("max local (in one shader) work group sizes x:%i y:%i z:%i\n",
-        work_grp_size[0], work_grp_size[1], work_grp_size[2]);
-
-    GLint work_grp_inv;
-    glGetIntegerv(GL_MAX_COMPUTE_WORK_GROUP_INVOCATIONS, &work_grp_inv);
-    printf("max local work group invocations %i\n", work_grp_inv);
-}
-
-void ShaderSetCamera(Shader& rayShader, Camera& camera)
-{
-    rayShader.setVec3("cam.origin", camera.GetOrigin());
-    rayShader.setVec3("cam.horizontal", camera.GetHorizontal());
-    rayShader.setVec3("cam.vertical", camera.GetVertical());
-    rayShader.setVec3("cam.lower_left_corner", camera.GetLowerLeftCorner());
+    shader.setVec3("cam.origin", camera.GetOrigin());
+    shader.setVec3("cam.horizontal", camera.GetHorizontal());
+    shader.setVec3("cam.vertical", camera.GetVertical());
+    shader.setVec3("cam.lower_left_corner", camera.GetLowerLeftCorner());
 }
 
 void processInput(GLFWwindow* window, Camera& camera)
@@ -72,7 +47,7 @@ void processInput(GLFWwindow* window, Camera& camera)
             camera.SetCameraControl(true);
             glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
         }
-            
+
     }
 
     glm::vec3 move = glm::vec3(0, 0, 0);
@@ -120,19 +95,20 @@ int main()
     Quad2D quad;
     FrameBuffer fbo;
     Texture framebufferImage(WINDOW_WIDTH, WINDOW_HEIGHT);
-    fbo.BindTexture(fbo.ID);
-    fbo.UnbindFrameBuffer();
+    fbo.BindTexture(framebufferImage.ID);
 
-    // This is a dumb way to overload Texture() but it works for this simple situation
-    Texture rtColor(WINDOW_WIDTH, WINDOW_HEIGHT, "a");
-    DispatchCompute();
+    FrameBuffer sfbo;
+    Texture screenImage(WINDOW_WIDTH, WINDOW_HEIGHT);
+    sfbo.BindTexture(screenImage.ID);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-    std::cout << cCompPath << std::endl;
+    Texture noiseTexture(valueNoiseImagePath);
 
-    //Shader quadShader(cVertPath.string().c_str(), cFragPath.string().c_str());
-    Shader rayShader(cCompPath.string().c_str());
-
+    Shader raytraceShader(expTraceVertPath.string().c_str(), expTraceFragPath.string().c_str());
+    Shader screenShader(expScreenVertPath.string().c_str(), expScreenFragPath.string().c_str());
+    
     Camera camera(glm::vec3(-2, 2, 1), glm::vec3(0, 0, -1), glm::vec3(0, 1, 0), 90, aspect_ratio);
+    glm::vec2 screenSize(WINDOW_WIDTH, WINDOW_HEIGHT);
 
     while (glfwWindowShouldClose(window.getWindow()) == 0)
     {
@@ -142,19 +118,35 @@ int main()
 
         processInput(window.getWindow(), camera);
 
-        ShaderSetCamera(rayShader, camera);
-        rayShader.setInt("Time", int(currentFrame));
-        rayShader.use();
-        glDispatchCompute((GLuint)WINDOW_WIDTH, (GLuint)WINDOW_HEIGHT, 1);
+        fbo.BindFrameBuffer();
 
-        glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+        glClearColor(0.f, 0.f, 0.f, 0.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        raytraceShader.use();
+        ShaderSetCamera(raytraceShader, camera);
+        raytraceShader.setInt("Time", int(currentFrame));
+        raytraceShader.setVec2("screenSize", screenSize);
+        quad.Draw();
+        
+        sfbo.BindFrameBuffer();
+
+        glClearColor(0.f, 0.f, 0.f, 0.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        screenShader.use();
+        screenShader.setInt("screenTexture", 0);
+        quad.BindTexture(GL_TEXTURE0, framebufferImage.ID);
+        quad.Draw();
+
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
         window.composeDearImGuiFrame();
-        window.showScene(rtColor.ID);
+        window.showScene(screenImage.ID);
 
         ImGui::Begin("Stats", NULL, ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoTitleBar);
         ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
-        ImGui::Text("GLFW deltaTime FPS: %.1f", 1.f/dt);
+        ImGui::Text("GLFW deltaTime FPS: %.1f", 1.f / dt);
         ImGui::End();
 
         ImGui::Render();
