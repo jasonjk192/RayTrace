@@ -1,5 +1,33 @@
 /////// Scene Elements ////////
 
+mat4 rotationAxisAngle( vec3 v, float angle )
+{
+    float s = sin( angle );
+    float c = cos( angle );
+    float ic = 1.0 - c;
+
+    return mat4( v.x*v.x*ic + c,     v.y*v.x*ic - s*v.z, v.z*v.x*ic + s*v.y, 0.0,
+                 v.x*v.y*ic + s*v.z, v.y*v.y*ic + c,     v.z*v.y*ic - s*v.x, 0.0,
+                 v.x*v.z*ic - s*v.y, v.y*v.z*ic + s*v.x, v.z*v.z*ic + c,     0.0,
+			     0.0,                0.0,                0.0,                1.0 );
+}
+
+mat4 translate( float x, float y, float z )
+{
+    return mat4( 1.0, 0.0, 0.0, 0.0,
+				 0.0, 1.0, 0.0, 0.0,
+				 0.0, 0.0, 1.0, 0.0,
+				 x,   y,   z,   1.0 );
+}
+
+mat4 translate( vec3 v )
+{
+    return mat4( 1.0, 0.0, 0.0, 0.0,
+				 0.0, 1.0, 0.0, 0.0,
+				 0.0, 0.0, 1.0, 0.0,
+				 v.x, v.y, v.z, 1.0 );
+}
+
 /////////// Sphere ////////////
 
 struct Sphere
@@ -50,14 +78,20 @@ struct Box
 {
     vec3 minCorner;
     vec3 maxCorner;
+    mat4 transformationMatrix;
 };
 
 bool hit_box(Box b, Ray r, float t_min, float t_max, inout HitRecord rec)
 {
-    vec3 invDir = 1.0 / r.direction;
+    vec3 center = (b.maxCorner + b.minCorner) * 0.5;
+    mat4 invBoxMat = inverse(b.transformationMatrix);
 
-    vec3 f = (b.maxCorner - r.origin) * invDir;
-    vec3 n = (b.minCorner - r.origin) * invDir;
+    vec3 rd = (invBoxMat * vec4(r.direction,0.0)).xyz;
+	vec3 ro = (invBoxMat * vec4(r.origin + center,1.0)).xyz;
+
+    vec3 invDir = 1.0 / rd;
+    vec3 f = (b.maxCorner - ro - center) * invDir;
+    vec3 n = (b.minCorner - ro - center) * invDir;
 
     vec3 tmax = max(f, n);
     vec3 tmin = min(f, n);
@@ -71,16 +105,15 @@ bool hit_box(Box b, Ray r, float t_min, float t_max, inout HitRecord rec)
         else rec.t = t1;
     }
     else return false;
-
     rec.p = at(r,rec.t);
-
-    vec3 center = (b.maxCorner + b.minCorner) * 0.5;
-    vec3 point = rec.p - center;
+    
+    vec3 point = (invBoxMat * vec4(rec.p + center, 1)).xyz;
     vec3 d = (b.maxCorner - b.minCorner) * 0.5;
-    float bias = 1.000001;
+    float bias = 1.000002;
     vec3 outward_normal = vec3(int(point.x / abs(d.x) * bias), int(point.y / abs(d.y) * bias), int(point.z / abs(d.z) * bias));
-
+    outward_normal = (vec4(outward_normal, 0) * invBoxMat).xyz;
     set_face_normal(r, outward_normal, rec);
+    
     return true;
 }
 
@@ -113,3 +146,4 @@ bool hit_plane(Plane p, Ray r, float t_min, float t_max, inout HitRecord rec)
 }
 
 ///////////////////////////////
+

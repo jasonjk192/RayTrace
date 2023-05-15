@@ -25,19 +25,20 @@ in vec2 TexCoord;
 
 uniform Camera cam;
 uniform vec2 screenSize;
-uniform int Time;
+uniform float Time;
 
 /////////// Scene /////////////
 
 bool hit_world(Ray r, float t_min, float t_max, inout HitRecord rec)
 {
-    Sphere s1 = Sphere(vec3(0.0,0.0,-1.0), 0.5);
+    Sphere s1 = Sphere(vec3(0.0,0.0,0.0), 0.5);
     Sphere s2 = Sphere(vec3(0.0,-100.5,-1.0), 100);
     Sphere s3 = Sphere(vec3(-1.0, 0.0, -1.0), 0.5);
     Sphere s4 = Sphere(vec3(1.0, 0.0, -1.0), 0.5);
     Sphere s5 = Sphere(vec3(0.0, 1.0, -1.0), 0.1);
 
-    Box b1 = Box(vec3(-2,-0.5,-4), vec3(2,3,-2));
+    Box b1 = Box(vec3(-0.5, -1.5,-2.5), vec3(1.5, 0,-1.5), rotationAxisAngle( normalize(vec3(1.0,1.0,0.0)), Time ));
+
     Plane p1 = Plane( 0.5, vec3(0,1,0));
 
     bool hasHit = false;
@@ -48,11 +49,11 @@ bool hit_world(Ray r, float t_min, float t_max, inout HitRecord rec)
         hasHit = true;
         rec.material = Material(MAT_DIFFUSE, vec3(0.9,0.1,0.4), 1.0, 0.0);
     }
-    /*if(hit_sphere(s2, r, t_min, rec.t, rec))
+    if(hit_sphere(s2, r, t_min, rec.t, rec))
     {
         hasHit = true;
         rec.material = Material(MAT_METAL, vec3(0.8,0.8,0), 1.0, 0.0);
-    }*/
+    }
     if(hit_plane(p1, r, t_min, rec.t, rec))
     {
         hasHit = true;
@@ -67,7 +68,7 @@ bool hit_world(Ray r, float t_min, float t_max, inout HitRecord rec)
     if(hit_sphere(s4, r, t_min, rec.t, rec))
     {
         hasHit = true;
-        rec.material = Material(MAT_DIELECTRIC, vec3(1.0), 0.0, 1.5);
+        rec.material = Material(MAT_DIELECTRIC, vec3(1,0.8,1), 0.0, 1.5);
     }
 
     if(hit_box(b1, r, t_min, rec.t, rec))
@@ -76,11 +77,11 @@ bool hit_world(Ray r, float t_min, float t_max, inout HitRecord rec)
         rec.material = Material(MAT_METAL, vec3(0.4,0.8,0.9), 0.1, 1.5);
     }
 
-    /*if(hit_sphere(s5, r, t_min, rec.t, rec))
+    if(hit_sphere(s5, r, t_min, rec.t, rec))
     {
         hasHit = true;
         rec.material = Material(MAT_LIGHT, vec3(50.0), 0.0, 1.5);
-    }*/
+    }
 
     return hasHit;
 }
@@ -153,7 +154,7 @@ bool ray_material_scatter(Ray r, HitRecord rec, inout float seed, out ScatterRec
 
         srec.specular_ray = Ray(rec.p, normalize(direction), r.time);
         srec.is_specular = true;
-        srec.attenuation = vec3(1.0);
+        srec.attenuation = rec.material.albedo;
         return true;
     }
 

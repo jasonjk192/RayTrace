@@ -125,7 +125,7 @@ int main()
 
         raytraceShader.use();
         ShaderSetCamera(raytraceShader, camera);
-        raytraceShader.setInt("Time", int(currentFrame));
+        raytraceShader.setFloat("Time", currentFrame);
         raytraceShader.setVec2("screenSize", screenSize);
         quad.Draw();
         
