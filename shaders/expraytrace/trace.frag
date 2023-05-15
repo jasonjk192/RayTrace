@@ -49,11 +49,13 @@ bool hit_world(Ray r, float t_min, float t_max, inout HitRecord rec)
         hasHit = true;
         rec.material = Material(MAT_DIFFUSE, vec3(0.9,0.1,0.4), 1.0, 0.0);
     }
-    if(hit_sphere(s2, r, t_min, rec.t, rec))
+
+    /*if(hit_sphere(s2, r, t_min, rec.t, rec))
     {
         hasHit = true;
         rec.material = Material(MAT_METAL, vec3(0.8,0.8,0), 1.0, 0.0);
-    }
+    }*/
+
     if(hit_plane(p1, r, t_min, rec.t, rec))
     {
         hasHit = true;
@@ -65,6 +67,7 @@ bool hit_world(Ray r, float t_min, float t_max, inout HitRecord rec)
         hasHit = true;
         rec.material = Material(MAT_METAL, vec3(0.7,0.4,0.9), 0.5, 0.0);
     }
+
     if(hit_sphere(s4, r, t_min, rec.t, rec))
     {
         hasHit = true;
@@ -80,7 +83,7 @@ bool hit_world(Ray r, float t_min, float t_max, inout HitRecord rec)
     if(hit_sphere(s5, r, t_min, rec.t, rec))
     {
         hasHit = true;
-        rec.material = Material(MAT_LIGHT, vec3(50.0), 0.0, 1.5);
+        rec.material = Material(MAT_LIGHT, vec3(10.0), 0.0, 1.5);
     }
 
     return hasHit;
@@ -188,43 +191,25 @@ vec3 ray_color(Ray r, inout float seed)
                 }
                 else
                 {
-                    vec3 scatter_direction;
-                    vec3[3] uvw_for_lambert = build_onb_from_w(rec.normal);
 
-                    // Generate scatter ray from either diffuse material (cosine pdf) or dielectric glass material (hittable pdf)
-                    // Workaround for mixture pdf, doesn't support light source sampling for now
-                    if(hash1(seed) > 1)
-                    {
-                        vec3 direction = vec3(1, 0, -1) - rec.p;
-                        float distance_squared = dot(direction, direction);
-                        vec3[3] uvw = build_onb_from_w(direction);
-                        scatter_direction = onb_local(uvw, random_to_sphere(0.5, distance_squared, seed));
-                    }
-                    else
-                    {
-                        scatter_direction = onb_local(uvw_for_lambert, random_cosine_direction(seed));
-                    }
+                    /*vec3[3] uvw_for_lambert = build_onb_from_w(rec.normal);
+                    vec3 scatter_direction = pdf_cosine_generate(uvw_for_lambert, seed);
                     Ray scattered = Ray(rec.p, scatter_direction, r.time);
+                    float pdf = pdf_cosine_value(uvw_for_lambert, scatter_direction);*/
 
-                    // Then find out the pdf contribution of both pdfs and average them out
-                    vec3 direction = vec3(1, 0, -1) - scatter_direction;
-                    float radius = 0.5;
-                    float cos_theta_max = sqrt(1 - radius * radius / dot(direction, direction));
-                    float solid_angle = 2 * PI * (1 - cos_theta_max);
-                    float pdf_value_1 = 1/solid_angle;
-                    
-                    float cosine = dot(normalize(scatter_direction), uvw_for_lambert[2]);
-                    float pdf_value_2 = (cosine <= 0) ? 0 : cosine / PI;
+                    Sphere s = Sphere(vec3(0.0, 1.0, -1.0), 0.1);
 
-                    float pdf = (pdf_value_1 + pdf_value_2) * 0.5;
-                    pdf = pdf_value_2;
+
+                    vec3 scatter_direction = pdf_hittable_sphere_generate(s, rec.p, seed) ;
+                    Ray scattered = Ray(rec.p, scatter_direction, r.time);
+                    float pdf = pdf_hittable_sphere_value(s, rec.p, scatter_direction);
 
                     color *= srec.attenuation * ray_material_scattering_pdf(r, rec, scattered) / pdf;
                     color += emit_color;
                     r = scattered;
                 }
             }
-            else return color + emit_color;
+            else return color * emit_color;
         }
         else return color * get_sky(normalize(r.direction));
     }

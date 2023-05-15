@@ -147,3 +147,33 @@ bool hit_plane(Plane p, Ray r, float t_min, float t_max, inout HitRecord rec)
 
 ///////////////////////////////
 
+vec3 pdf_cosine_generate(vec3[3] uvw, inout float seed)
+{
+    return onb_local(uvw, random_cosine_direction(seed));
+}
+
+float pdf_cosine_value(vec3[3] uvw, vec3 direction)
+{
+    float cosine = dot(normalize(direction), uvw[2]);
+    return (cosine <= 0) ? 0 : cosine / PI;
+}
+
+vec3 pdf_hittable_sphere_generate(Sphere s, vec3 o, inout float seed)
+{
+    vec3 direction = s.center - o;
+    float distance_squared = dot(direction, direction);
+    vec3[3] uvw = build_onb_from_w(direction);
+    return onb_local(uvw, random_to_sphere(s.radius, distance_squared, seed));
+}
+
+float pdf_hittable_sphere_value(Sphere s, vec3 o, vec3 direction)
+{
+    HitRecord rec;
+    if (!hit_sphere(s, Ray(o, direction, 0), 0.001, inf, rec)) return 0;
+
+    vec3 dir = s.center - o;
+    float cos_theta_max = sqrt(1 - s.radius * s.radius / dot(dir, dir));
+    float solid_angle = 2 * PI * (1 - cos_theta_max);
+
+    return  1 / solid_angle;
+}
