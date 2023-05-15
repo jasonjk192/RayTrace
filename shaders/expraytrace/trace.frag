@@ -10,7 +10,7 @@
 #define INV_PI 0.31830988618379067153776752674503
 
 const float inf = 99999.f;
-const int samples_per_pixel = 100;
+const int samples_per_pixel = 150;
 const int max_depth = 20;
 const uint k = 1103515245U;
 float gSeed = 0.0;
@@ -40,6 +40,9 @@ bool hit_world(Ray r, float t_min, float t_max, inout HitRecord rec)
     Box b1 = Box(vec3(-0.5, -1.5,-2.5), vec3(1.5, 0,-1.5), rotationAxisAngle( normalize(vec3(1.0,1.0,0.0)), Time ));
 
     Plane p1 = Plane( 0.5, vec3(0,1,0));
+
+    
+    Rectangle r1 = Rectangle(vec2(0,0), vec2(2,2), -2,rotationAxisAngle( normalize(vec3(0.0,1.0,0.0)), 0 ));
 
     bool hasHit = false;
     rec.t = t_max;
@@ -80,10 +83,22 @@ bool hit_world(Ray r, float t_min, float t_max, inout HitRecord rec)
         rec.material = Material(MAT_METAL, vec3(0.4,0.8,0.9), 0.1, 1.5);
     }
 
+    /*if(hit_box(b2, r, t_min, rec.t, rec))
+    {
+        hasHit = true;
+        rec.material = Material(MAT_METAL, vec3(0.4,0.8,0.9), 0.1, 1.5);
+    }*/
+
     if(hit_sphere(s5, r, t_min, rec.t, rec))
     {
         hasHit = true;
         rec.material = Material(MAT_LIGHT, vec3(10.0), 0.0, 1.5);
+    }
+
+    if(hit_rectangle(r1, r, t_min, rec.t, rec))
+    {
+        hasHit = true;
+        rec.material = Material(MAT_DIFFUSE, vec3(0.1,0.9,0.8), 1.0, 1.0);
     }
 
     return hasHit;
@@ -95,7 +110,7 @@ bool hit_world(Ray r, float t_min, float t_max, inout HitRecord rec)
 
 vec3 get_sky(vec3 dir)
 {
-    //return vec3(0);
+    return vec3(0);
     float t = 0.5*(dir.y + 1.0);
     return (1.0-t)*vec3(1.0, 1.0, 1.0) + t*vec3(0.5, 0.7, 1.0);
 }
@@ -191,18 +206,27 @@ vec3 ray_color(Ray r, inout float seed)
                 }
                 else
                 {
-
                     /*vec3[3] uvw_for_lambert = build_onb_from_w(rec.normal);
                     vec3 scatter_direction = pdf_cosine_generate(uvw_for_lambert, seed);
                     Ray scattered = Ray(rec.p, scatter_direction, r.time);
-                    float pdf = pdf_cosine_value(uvw_for_lambert, scatter_direction);*/
+                    float pdf = pdf_cosine_value(uvw_for_lambert, scatter_direction);
 
                     Sphere s = Sphere(vec3(0.0, 1.0, -1.0), 0.1);
-
-
-                    vec3 scatter_direction = pdf_hittable_sphere_generate(s, rec.p, seed) ;
+                    vec3 scatter_direction = pdf_hittable_sphere_generate(s, rec.p, seed);
                     Ray scattered = Ray(rec.p, scatter_direction, r.time);
-                    float pdf = pdf_hittable_sphere_value(s, rec.p, scatter_direction);
+                    float pdf = pdf_hittable_sphere_value(s, rec.p, scatter_direction);*/
+
+                    vec3[3] uvw_for_lambert = build_onb_from_w(rec.normal);
+                    Sphere s = Sphere(vec3(0.0, 1.0, -1.0), 0.1);
+
+                    vec3 scatter_direction;
+                    if(hash1(seed) > 0.5)
+                        scatter_direction = pdf_cosine_generate(uvw_for_lambert, seed);
+                    else
+                        scatter_direction = pdf_hittable_sphere_generate(s, rec.p, seed);
+
+                    Ray scattered = Ray(rec.p, scatter_direction, r.time);
+                    float pdf = 0.5 * pdf_cosine_value(uvw_for_lambert, scatter_direction) + 0.5 * pdf_hittable_sphere_value(s, rec.p, scatter_direction);
 
                     color *= srec.attenuation * ray_material_scattering_pdf(r, rec, scattered) / pdf;
                     color += emit_color;
@@ -215,6 +239,8 @@ vec3 ray_color(Ray r, inout float seed)
     }
     return color;
 }
+
+
 
 ///////////////////////////////
 

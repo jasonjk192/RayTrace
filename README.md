@@ -19,3 +19,6 @@ Raytrace with no light but includes support for dielectrics!
 
 ![Raytrace](https://github.com/jasonjk192/RayTrace/blob/main/screenshots/scene4.png?raw=true)
 3rd method with improved performance + new scene objects!
+
+![Raytrace](https://github.com/jasonjk192/RayTrace/blob/main/screenshots/scene5.png?raw=true)
+XY Rect + spherical light + rotating box!

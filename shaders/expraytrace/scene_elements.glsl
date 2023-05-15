@@ -147,6 +147,47 @@ bool hit_plane(Plane p, Ray r, float t_min, float t_max, inout HitRecord rec)
 
 ///////////////////////////////
 
+////////// Rectangle //////////
+
+struct Rectangle
+{
+    vec2 minCorner;
+    vec2 maxCorner;
+    float dist;
+    mat4 transformationMatrix;
+};
+
+bool hit_rectangle(Rectangle rect, Ray r, float t_min, float t_max, inout HitRecord rec)
+{
+    //vec3 center = vec3((rect.maxCorner + rect.minCorner) * 0.5, 0);
+    //mat4 invMat = inverse(rect.transformationMatrix);
+
+    //vec3 rd = (invMat * vec4(r.direction,0.0)).xyz;
+	//vec3 ro = (invMat * vec4(r.origin + center,1.0)).xyz;
+    
+    vec3 rd = r.direction;
+    vec3 ro = r.origin;
+
+    vec3 invDir = 1.0 /  rd;
+    float t = (rect.dist - ro.z) * invDir.z;
+    if (t < t_min || t_max < t) return false;
+
+    vec3 point = ro + rd * t;
+
+    bool hit = point.x <= rect.maxCorner.x && point.x >= rect.minCorner.x &&
+               point.y <= rect.maxCorner.y && point.y >= rect.minCorner.y;
+
+    if(hit)
+    {
+        rec.t = t;
+        rec.p = at(r,rec.t);
+        set_face_normal(r, vec3(0,0,1), rec);
+    }
+    return hit;
+}
+
+///////////////////////////////
+
 vec3 pdf_cosine_generate(vec3[3] uvw, inout float seed)
 {
     return onb_local(uvw, random_cosine_direction(seed));
